@@ -1,0 +1,12 @@
+# Configuración de OpenAI
+OPENAI_API_KEY=tu_api_key_de_openai_aqui
+
+# Configuración del modelo (cambiar a gpt-3.5-turbo si no tienes acceso a gpt-4)
+MODEL_NAME=gpt-3.5-turbo
+MAX_TOKENS=4000
+TEMPERATURE=0.7
+
+# Configuración del servidor
+HOST=0.0.0.0
+PORT=8000
+RELOAD=true 
