@@ -1,10 +1,53 @@
 from docx import Document
 import re
 from typing import Dict, Any
+import os
+import PyPDF2
+import pdfplumber
 
-def parse_licitacion_dinamica(path: str) -> Dict[str, Any]:
+def detectar_tipo_archivo(path: str) -> str:
     """
-    Parsea un documento Word de licitación y extrae su contenido estructurado
+    Detecta el tipo de archivo basado en su extensión
+    """
+    extension = os.path.splitext(path)[1].lower()
+    if extension == '.docx':
+        return 'docx'
+    elif extension == '.pdf':
+        return 'pdf'
+    else:
+        raise ValueError(f"Formato de archivo no soportado: {extension}. Solo se soportan .docx y .pdf")
+
+def extraer_texto_pdf(path: str) -> str:
+    """
+    Extrae texto de un archivo PDF usando pdfplumber para mejor calidad
+    """
+    content = ""
+    
+    try:
+        with pdfplumber.open(path) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    content += page_text + "\n"
+    except Exception as e:
+        print(f"Error con pdfplumber: {e}")
+        # Fallback a PyPDF2
+        try:
+            with open(path, 'rb') as file:
+                pdf_reader = PyPDF2.PdfReader(file)
+                for page in pdf_reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        content += page_text + "\n"
+        except Exception as e2:
+            print(f"Error con PyPDF2: {e2}")
+            raise ValueError(f"No se pudo extraer texto del PDF: {path}")
+    
+    return content
+
+def extraer_texto_docx(path: str) -> str:
+    """
+    Extrae texto de un archivo DOCX
     """
     doc = Document(path)
     content = ""
@@ -45,6 +88,23 @@ def parse_licitacion_dinamica(path: str) -> Dict[str, Any]:
                         content += f"FOOTER: {paragraph.text.strip()}\n"
     except:
         pass  # Algunos documentos pueden no tener headers/footers accesibles
+    
+    return content
+
+def parse_licitacion_dinamica(path: str) -> Dict[str, Any]:
+    """
+    Parsea un documento de licitación (DOCX o PDF) y extrae su contenido estructurado
+    """
+    # Detectar tipo de archivo
+    tipo_archivo = detectar_tipo_archivo(path)
+    
+    # Extraer texto según el tipo de archivo
+    if tipo_archivo == 'docx':
+        content = extraer_texto_docx(path)
+    elif tipo_archivo == 'pdf':
+        content = extraer_texto_pdf(path)
+    else:
+        raise ValueError(f"Tipo de archivo no soportado: {tipo_archivo}")
     
     # Detectar secciones por múltiples patrones mejorados
     secciones = {}

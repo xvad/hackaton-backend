@@ -21,7 +21,7 @@ class AIGenerator:
         # Cargar ofertas técnicas históricas
         ofertas_count = 0
         for filename in os.listdir(ofertas_dir):
-            if filename.endswith('.docx'):
+            if filename.endswith('.docx') or filename.endswith('.pdf'):
                 file_path = os.path.join(ofertas_dir, filename)
                 try:
                     oferta = parse_licitacion_dinamica(file_path)
@@ -34,7 +34,7 @@ class AIGenerator:
         # Cargar licitaciones históricas
         licitaciones_count = 0
         for filename in os.listdir(licitaciones_dir):
-            if filename.endswith('.docx'):
+            if filename.endswith('.docx') or filename.endswith('.pdf'):
                 file_path = os.path.join(licitaciones_dir, filename)
                 try:
                     licitacion = parse_licitacion_dinamica(file_path)
@@ -59,14 +59,24 @@ class AIGenerator:
         return respuesta_json
 
     def generar_oferta_multiple_licitaciones(self, licitaciones: List[Dict[str, Any]], empresa_nombre: str, empresa_descripcion: str = "") -> Dict[str, Any]:
-        """Genera una oferta técnica analizando múltiples licitaciones y combinando la mejor información"""
+        """Genera una oferta técnica analizando múltiples licitaciones y calculando todos los parámetros con IA"""
         
-        # Crear prompt con contexto de múltiples licitaciones
-        prompt = self._crear_prompt_multiple_licitaciones(licitaciones, empresa_nombre, empresa_descripcion)
+        print("🤖 Iniciando generación de oferta múltiple con análisis inteligente...")
         
-        # Llamar a la IA
-        respuesta_json = self._generar_json_con_ia(prompt, self._obtener_estructura_combinada(licitaciones))
-        return respuesta_json
+        # Paso 1: Análisis detallado de las licitaciones para extraer información clave
+        analisis_proyecto = self._analizar_licitaciones_detallado(licitaciones)
+        
+        # Paso 2: Calcular parámetros del proyecto usando IA
+        parametros_proyecto = self._calcular_parametros_proyecto_ia(licitaciones, analisis_proyecto, empresa_nombre)
+        
+        # Paso 3: Generar estructura base
+        estructura_base = self._generar_estructura_base(parametros_proyecto, empresa_nombre)
+        
+        # Paso 4: Generar contenido sección por sección
+        estructura_base = self._generar_contenido_por_secciones(estructura_base, licitaciones, analisis_proyecto, parametros_proyecto)
+        
+        print("✅ Oferta múltiple generada exitosamente con parámetros calculados por IA")
+        return estructura_base
 
     def generar_oferta_estructurada(self, licitaciones: List[Dict[str, Any]], empresa_nombre: str, empresa_descripcion: str = "", nombre_proyecto: str = "Proyecto", cliente: str = "Cliente", fecha: str = "2025", costo_total: int = 45000000, plazo: str = "5 meses") -> Dict[str, Any]:
         """Genera una oferta técnica en formato estructurado con secciones organizadas"""
@@ -851,103 +861,238 @@ class AIGenerator:
         }
 
     def _analizar_licitaciones_detallado(self, licitaciones: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Analiza detalladamente las licitaciones para entender el proyecto"""
+        """Analiza las licitaciones para extraer información clave del proyecto"""
         print("🔍 Analizando licitaciones para entender el proyecto...")
         
-        # Preparar contenido de todas las licitaciones con mejor estructura
-        contenido_completo = ""
-        for i, licitacion in enumerate(licitaciones, 1):
-            contenido_completo += f"\n=== LICITACIÓN {i}: {licitacion['archivo']} ===\n"
+        try:
+            # Dividir el análisis en partes más pequeñas para evitar exceder tokens
+            analisis_final = {}
             
-            # Agregar contenido por secciones
-            for seccion, contenido in licitacion['datos'].items():
-                contenido_str = str(contenido)
-                if contenido_str and len(contenido_str.strip()) > 10:
-                    contenido_completo += f"\n--- SECCIÓN: {seccion} ---\n"
-                    contenido_completo += f"{contenido_str}\n"
+            # Parte 1: Análisis básico del cliente y sector
+            print("📋 Analizando cliente y sector...")
+            analisis_basico = self._analizar_cliente_sector(licitaciones)
+            analisis_final.update(analisis_basico)
             
-            contenido_completo += "=== FIN LICITACIÓN ===\n"
-        
-        # Si no hay contenido sustancial, usar fallback
-        if len(contenido_completo.strip()) < 100:
-            print("⚠️ Contenido insuficiente para análisis detallado")
+            # Parte 2: Análisis del proyecto y objetivos
+            print("🎯 Analizando proyecto y objetivos...")
+            analisis_proyecto = self._analizar_proyecto_objetivos(licitaciones)
+            analisis_final.update(analisis_proyecto)
+            
+            # Parte 3: Análisis técnico
+            print("⚙️ Analizando requisitos técnicos...")
+            analisis_tecnico = self._analizar_requisitos_tecnicos(licitaciones)
+            analisis_final.update(analisis_tecnico)
+            
+            print(f"✅ Análisis completado: {analisis_final.get('objetivo_principal', 'N/A')[:100]}...")
+            return analisis_final
+            
+        except Exception as e:
+            print(f"⚠️ Error en análisis detallado: {e}")
             return self._analisis_fallback()
         
-        prompt_analisis = f"""
-        Eres un experto en análisis de licitaciones y propuestas técnicas. 
-        Analiza DETALLADAMENTE las siguientes licitaciones y extrae TODA la información clave del proyecto.
+    def _analizar_cliente_sector(self, licitaciones: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analiza información básica del cliente y sector"""
         
-        LICITACIONES A ANALIZAR:
-        {contenido_completo}
+        # Extraer solo información clave de la primera licitación
+        if not licitaciones:
+            return {"nombre_cliente": "Cliente", "sector": "Tecnología", "usuarios_finales": ["Usuarios"]}
         
-        INSTRUCCIONES DETALLADAS:
-        1. NOMBRE DEL CLIENTE: Busca en títulos, encabezados, referencias, headers, footers
-        2. SECTOR: Identifica si es bancario, educativo, salud, retail, gobierno, etc.
-        3. OBJETIVO PRINCIPAL: ¿Qué quiere lograr el cliente específicamente?
-        4. ALCANCE: ¿Qué incluye y qué no incluye el proyecto?
-        5. REQUISITOS TÉCNICOS: Tecnologías, plataformas, integraciones mencionadas
-        6. TIPO DE SISTEMA: ¿Es web, móvil, desktop, híbrido, etc.?
-        7. USUARIOS FINALES: ¿Quiénes usarán el sistema? (empleados, clientes, estudiantes, etc.)
-        8. FUNCIONALIDADES: ¿Qué debe hacer el sistema específicamente?
-        9. PLAZOS: Tiempos mencionados para desarrollo o implementación
-        10. CRITERIOS DE EVALUACIÓN: ¿Cómo se evaluará la propuesta?
-        11. CONTEXTO: ¿Por qué necesita esta solución? ¿Qué problema resuelve?
-        12. PRESUPUESTO: ¿Hay información sobre costos o presupuesto?
-        13. INTEGRACIONES: ¿Con qué sistemas debe integrarse?
-        14. SEGURIDAD: ¿Hay requisitos específicos de seguridad?
-        15. CAPACITACIÓN: ¿Se requiere capacitación o transferencia de conocimiento?
+        licitacion = licitaciones[0]
         
-        Devuelve un JSON con la siguiente estructura:
+        # Buscar información específica del cliente en secciones clave
+        contenido_cliente = ""
+        secciones_cliente = ['titulo', 'encabezado', 'header', 'cliente', 'empresa', 'organizacion', 'institucion']
+        
+        for seccion, contenido in licitacion['datos'].items():
+            if any(palabra in seccion.lower() for palabra in secciones_cliente):
+                if isinstance(contenido, str) and len(contenido) > 50:
+                    contenido_cliente += f"{seccion}: {contenido[:200]}\n"
+        
+        # Si no encontramos información específica, usar las primeras secciones
+        if not contenido_cliente:
+            for seccion, contenido in list(licitacion['datos'].items())[:3]:
+                if isinstance(contenido, str) and len(contenido) > 20:
+                    contenido_cliente += f"{seccion}: {contenido[:150]}\n"
+        
+        prompt = f"""
+        Analiza este contenido y extrae información del cliente:
+        
+        CONTENIDO:
+        {contenido_cliente}
+        
+        ARCHIVO: {licitacion['archivo']}
+        
+        TAREA:
+        Busca EXHAUSTIVAMENTE el nombre del cliente y su sector.
+        
+        Devuelve SOLO un JSON:
         {{
-            "nombre_cliente": "Nombre específico del cliente (ej: Banco Santander, Universidad de Chile, Hospital Regional)",
-            "sector": "Sector específico (ej: bancario, educativo, salud, retail, gobierno)",
-            "objetivo_principal": "Descripción clara y específica del objetivo del proyecto",
-            "alcance": "Alcance detallado del proyecto, qué incluye y qué no",
-            "requisitos_tecnicos": ["Lista detallada de requisitos técnicos"],
-            "tipo_sistema": "Tipo de sistema o solución requerida",
-            "usuarios_finales": ["Lista específica de usuarios finales del sector"],
-            "funcionalidades_especificas": ["Lista detallada de funcionalidades requeridas"],
-            "plazos": "Plazos específicos mencionados",
-            "criterios_evaluacion": ["Criterios de evaluación identificados"],
-            "contexto_proyecto": "Contexto detallado: por qué el cliente necesita esta solución",
-            "presupuesto": "Información sobre presupuesto si está disponible",
-            "integraciones": ["Sistemas con los que debe integrarse"],
-            "requisitos_seguridad": ["Requisitos de seguridad específicos"],
-            "capacitacion": "Requisitos de capacitación o transferencia de conocimiento",
-            "resumen_proyecto": "Resumen ejecutivo completo del proyecto incluyendo cliente, sector y objetivo"
+            "nombre_cliente": "Nombre específico del cliente",
+            "sector": "Sector específico (bancario, educativo, salud, etc.)",
+            "usuarios_finales": ["Usuarios específicos del sector"]
         }}
-        
-        IMPORTANTE: 
-        - Busca EXHAUSTIVAMENTE el nombre del cliente en todo el documento
-        - Identifica el sector basándote en el contexto y terminología específica
-        - Analiza CADA SECCIÓN de cada licitación para extraer información
-        - Si no encuentras información específica, infiere basándote en el contexto
-        - Sé ESPECÍFICO y DETALLADO en cada campo
-        - Incluye TODA la información técnica relevante encontrada
-        - Menciona funcionalidades específicas del sector identificado
         """
         
         try:
             response = self.client.chat.completions.create(
                 model=self.modelo_backend,
                 messages=[
-                    {"role": "system", "content": "Eres un experto en análisis de licitaciones y propuestas técnicas. Tu tarea es analizar detalladamente las licitaciones y extraer toda la información clave del proyecto."},
-                    {"role": "user", "content": prompt_analisis}
+                    {"role": "system", "content": "Eres experto en identificar clientes y sectores. Busca nombres específicos."},
+                    {"role": "user", "content": prompt}
                 ],
-                max_tokens=2000,
-                temperature=0.3
+                max_tokens=500,
+                temperature=0.1
             )
             
-            contenido = response.choices[0].message.content
-            json_str = self._extraer_json(contenido)
-            analisis = json.loads(json_str)
-            
-            print(f"✅ Análisis completado: {analisis.get('objetivo_principal', 'N/A')[:100]}...")
-            return analisis
+            contenido = response.choices[0].message.content.strip()
+            return json.loads(self._extraer_json(contenido))
             
         except Exception as e:
-            print(f"⚠️ Error en análisis detallado: {e}")
-            return self._analisis_fallback()
+            print(f"⚠️ Error en análisis de cliente: {e}")
+            return {
+                "nombre_cliente": "Cliente",
+                "sector": "Tecnología",
+                "usuarios_finales": ["Usuarios del sistema"]
+            }
+
+    def _analizar_proyecto_objetivos(self, licitaciones: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analiza objetivos y alcance del proyecto"""
+        
+        if not licitaciones:
+            return {
+                "objetivo_principal": "Desarrollar sistema tecnológico",
+                "alcance": "Sistema completo",
+                "tipo_sistema": "Sistema web",
+                "complejidad": "MEDIA"
+            }
+        
+        licitacion = licitaciones[0]
+        
+        # Buscar secciones específicas del proyecto
+        contenido_proyecto = ""
+        secciones_proyecto = ['objetivo', 'alcance', 'proyecto', 'sistema', 'desarrollo', 'implementacion']
+        
+        for seccion, contenido in licitacion['datos'].items():
+            if any(palabra in seccion.lower() for palabra in secciones_proyecto):
+                if isinstance(contenido, str) and len(contenido) > 30:
+                    contenido_proyecto += f"{seccion}: {contenido[:180]}\n"
+        
+        # Si no encontramos secciones específicas, usar contenido general
+        if not contenido_proyecto:
+            for seccion, contenido in list(licitacion['datos'].items())[:4]:
+                if isinstance(contenido, str) and len(contenido) > 20:
+                    contenido_proyecto += f"{seccion}: {contenido[:120]}\n"
+        
+        prompt = f"""
+        Analiza este contenido y extrae información del proyecto:
+        
+        CONTENIDO:
+        {contenido_proyecto}
+        
+        ARCHIVO: {licitacion['archivo']}
+        
+        TAREA:
+        Extrae información específica del proyecto:
+        
+        Devuelve SOLO un JSON:
+        {{
+            "objetivo_principal": "Objetivo específico del proyecto",
+            "alcance": "Alcance específico del proyecto",
+            "tipo_sistema": "Tipo de sistema requerido",
+            "complejidad": "BAJA/MEDIA/ALTA"
+        }}
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres experto en análisis de proyectos tecnológicos. Extrae información específica."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500,
+                temperature=0.1
+            )
+            
+            contenido = response.choices[0].message.content.strip()
+            return json.loads(self._extraer_json(contenido))
+            
+        except Exception as e:
+            print(f"⚠️ Error en análisis de proyecto: {e}")
+            return {
+                "objetivo_principal": "Desarrollar sistema tecnológico",
+                "alcance": "Sistema completo",
+                "tipo_sistema": "Sistema web",
+                "complejidad": "MEDIA"
+            }
+
+    def _analizar_requisitos_tecnicos(self, licitaciones: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analiza requisitos técnicos y tecnologías"""
+        
+        if not licitaciones:
+            return {
+                "requisitos_tecnicos": ["Sistema web", "Base de datos"],
+                "tecnologias_mencionadas": ["Python", "React"],
+                "restricciones": ["Sin restricciones específicas"]
+            }
+        
+        licitacion = licitaciones[0]
+        
+        # Buscar secciones técnicas
+        contenido_tecnico = ""
+        secciones_tecnico = ['requisitos', 'tecnico', 'tecnologia', 'sistema', 'plataforma', 'software', 'hardware']
+        
+        for seccion, contenido in licitacion['datos'].items():
+            if any(palabra in seccion.lower() for palabra in secciones_tecnico):
+                if isinstance(contenido, str) and len(contenido) > 30:
+                    contenido_tecnico += f"{seccion}: {contenido[:150]}\n"
+        
+        # Si no encontramos secciones técnicas, usar contenido general
+        if not contenido_tecnico:
+            for seccion, contenido in list(licitacion['datos'].items())[:3]:
+                if isinstance(contenido, str) and len(contenido) > 20:
+                    contenido_tecnico += f"{seccion}: {contenido[:100]}\n"
+        
+        prompt = f"""
+        Analiza este contenido y extrae información técnica:
+        
+        CONTENIDO:
+        {contenido_tecnico}
+        
+        ARCHIVO: {licitacion['archivo']}
+        
+        TAREA:
+        Extrae requisitos técnicos específicos:
+        
+        Devuelve SOLO un JSON:
+        {{
+            "requisitos_tecnicos": ["Requisitos específicos"],
+            "tecnologias_mencionadas": ["Tecnologías específicas"],
+            "restricciones": ["Restricciones específicas"]
+        }}
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres experto en análisis técnico. Extrae requisitos específicos."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500,
+                temperature=0.1
+            )
+            
+            contenido = response.choices[0].message.content.strip()
+            return json.loads(self._extraer_json(contenido))
+            
+        except Exception as e:
+            print(f"⚠️ Error en análisis técnico: {e}")
+            return {
+                "requisitos_tecnicos": ["Sistema web", "Base de datos"],
+                "tecnologias_mencionadas": ["Python", "React"],
+                "restricciones": ["Sin restricciones específicas"]
+            }
 
     def _analisis_fallback(self) -> Dict[str, Any]:
         """Análisis de fallback cuando no se puede hacer análisis detallado"""
@@ -1125,7 +1270,7 @@ class AIGenerator:
                     {"role": "system", "content": "Eres un experto en redacción de propuestas técnicas. Mejora el contenido para que sea específico y relevante."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=1000,
+                max_tokens=500,
                 temperature=0.3
             )
             
@@ -1184,7 +1329,7 @@ class AIGenerator:
                     {"role": "system", "content": "Eres un experto en análisis de sistemas y funcionalidades. Describe específicamente las funcionalidades requeridas."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=1500,
+                max_tokens=600,
                 temperature=0.3
             )
             
@@ -1256,3 +1401,1119 @@ class AIGenerator:
         if match:
             return match.group(0)
         raise ValueError("No se encontró JSON en la respuesta de la IA") 
+
+    def _calcular_parametros_proyecto_ia(self, licitaciones: List[Dict[str, Any]], analisis_proyecto: Dict[str, Any], empresa_nombre: str) -> Dict[str, Any]:
+        """Calcula automáticamente los parámetros del proyecto usando IA"""
+        
+        print("🧮 Calculando parámetros del proyecto con IA...")
+        
+        # Usar solo la información clave del análisis
+        nombre_cliente = analisis_proyecto.get('nombre_cliente', 'Cliente')
+        sector = analisis_proyecto.get('sector', 'Tecnología')
+        objetivo = analisis_proyecto.get('objetivo_principal', 'Desarrollar sistema')[:100]
+        complejidad = analisis_proyecto.get('complejidad', 'MEDIA')
+        
+        # Extraer información clave del archivo
+        archivo_info = ""
+        if licitaciones:
+            archivo_info = f"Archivo: {licitaciones[0]['archivo']}"
+        
+        # Calcular parámetros basados en complejidad y sector
+        if complejidad == "ALTA":
+            costo_base = 80000000
+            plazo_base = "8 meses"
+        elif complejidad == "BAJA":
+            costo_base = 25000000
+            plazo_base = "3 meses"
+        else:  # MEDIA
+            costo_base = 45000000
+            plazo_base = "5 meses"
+        
+        # Ajustar por sector
+        if "bancario" in sector.lower():
+            costo_base = int(costo_base * 1.3)
+            plazo_base = "6 meses"
+        elif "educativo" in sector.lower():
+            costo_base = int(costo_base * 0.9)
+            plazo_base = "4 meses"
+        elif "salud" in sector.lower():
+            costo_base = int(costo_base * 1.2)
+            plazo_base = "7 meses"
+        
+        prompt = f"""
+        Basándote en esta información, calcula los parámetros del proyecto:
+        
+        CLIENTE: {nombre_cliente}
+        SECTOR: {sector}
+        OBJETIVO: {objetivo}
+        COMPLEJIDAD: {complejidad}
+        {archivo_info}
+        EMPRESA: {empresa_nombre}
+        
+        TAREA:
+        Calcula parámetros realistas basados en complejidad y sector:
+        
+        Devuelve SOLO un JSON:
+        {{
+            "nombre_proyecto": "Nombre específico del proyecto para {nombre_cliente}",
+            "cliente": "{nombre_cliente}",
+            "fecha": "2025",
+            "costo_total": {costo_base},
+            "plazo": "{plazo_base}"
+        }}
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres experto en cálculo de parámetros de proyectos."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=300,
+                temperature=0.1
+            )
+            
+            contenido = response.choices[0].message.content.strip()
+            parametros = json.loads(self._extraer_json(contenido))
+            
+            print(f"✅ Parámetros calculados: {parametros}")
+            return parametros
+            
+        except Exception as e:
+            print(f"⚠️ Error calculando parámetros: {e}")
+            # Fallback con valores calculados
+            return {
+                "nombre_proyecto": f"Proyecto {sector} - {nombre_cliente}",
+                "cliente": nombre_cliente,
+                "fecha": "2025",
+                "costo_total": costo_base,
+                "plazo": plazo_base
+            }
+
+    def _generar_oferta_estructurada_mejorada(self, licitaciones: List[Dict[str, Any]], analisis_proyecto: Dict[str, Any], parametros_proyecto: Dict[str, Any], empresa_nombre: str, empresa_descripcion: str) -> Dict[str, Any]:
+        """Genera una oferta estructurada mejorada con parámetros calculados por IA"""
+        
+        print("📝 Generando oferta estructurada mejorada...")
+        
+        # Extraer parámetros
+        nombre_proyecto = parametros_proyecto["nombre_proyecto"]
+        cliente = parametros_proyecto["cliente"]
+        fecha = parametros_proyecto["fecha"]
+        costo_total = parametros_proyecto["costo_total"]
+        plazo = parametros_proyecto["plazo"]
+        
+        # Extraer información clave del análisis
+        sector = analisis_proyecto.get('sector', 'Tecnología')
+        objetivo = analisis_proyecto.get('objetivo_principal', 'Desarrollar sistema')[:100]
+        alcance = analisis_proyecto.get('alcance', 'Sistema completo')[:100]
+        tipo_sistema = analisis_proyecto.get('tipo_sistema', 'Sistema web')
+        usuarios = analisis_proyecto.get('usuarios_finales', ['Usuarios del sistema'])
+        requisitos = analisis_proyecto.get('requisitos_tecnicos', ['Sistema web'])
+        
+        # Crear prompt optimizado con información específica
+        prompt = f"""
+        Genera una oferta técnica específica para {cliente} del sector {sector}:
+        
+        PROYECTO: {nombre_proyecto}
+        CLIENTE: {cliente}
+        SECTOR: {sector}
+        OBJETIVO: {objetivo}
+        ALCANCE: {alcance}
+        TIPO SISTEMA: {tipo_sistema}
+        USUARIOS: {', '.join(usuarios)}
+        REQUISITOS: {', '.join(requisitos)}
+        FECHA: {fecha}
+        COSTO: ${costo_total:,}
+        PLAZO: {plazo}
+        EMPRESA: {empresa_nombre}
+        
+        Genera JSON con estructura exacta:
+        {{
+            "projectInfo": {{
+                "name": "{nombre_proyecto}",
+                "client": "{cliente}",
+                "date": "{fecha}",
+                "totalCost": {costo_total},
+                "timeline": "{plazo}"
+            }},
+            "sections": [
+                {{
+                    "id": "1",
+                    "title": "Resumen Ejecutivo",
+                    "type": "text",
+                    "content": "Resumen específico para {cliente} del sector {sector}...",
+                    "pageBreak": true
+                }}
+            ],
+            "styling": {{
+                "primaryColor": "#2563eb",
+                "secondaryColor": "#1e40af",
+                "fontFamily": "Arial, sans-serif"
+            }}
+        }}
+        
+        IMPORTANTE: Personaliza TODO el contenido para {cliente} y el sector {sector}.
+        """
+        
+        # Generar JSON estructurado usando IA
+        try:
+            respuesta_json = self._generar_json_estructurado_con_ia(
+                prompt, 
+                nombre_proyecto, 
+                cliente, 
+                fecha, 
+                costo_total, 
+                plazo, 
+                empresa_nombre
+            )
+            
+            return respuesta_json
+            
+        except Exception as e:
+            print(f"⚠️ Error generando oferta estructurada: {e}")
+            # Fallback con estructura básica
+            return self._generar_estructura_fallback(
+                nombre_proyecto, 
+                cliente, 
+                fecha, 
+                costo_total, 
+                plazo, 
+                empresa_nombre
+            )
+
+    def _mejorar_secciones_especificas_avanzado(self, respuesta_json: Dict[str, Any], analisis_proyecto: Dict[str, Any], licitaciones: List[Dict[str, Any]], parametros_proyecto: Dict[str, Any]) -> Dict[str, Any]:
+        """Mejora las secciones específicas con análisis avanzado y parámetros calculados"""
+        
+        print("🔧 Mejorando secciones específicas con análisis avanzado...")
+        
+        try:
+            # Mejorar resumen ejecutivo
+            if "resumen_ejecutivo" in respuesta_json:
+                respuesta_json["resumen_ejecutivo"] = self._mejorar_resumen_ejecutivo_avanzado(
+                    respuesta_json["resumen_ejecutivo"], 
+                    analisis_proyecto, 
+                    parametros_proyecto
+                )
+            
+            # Mejorar funcionalidades clave
+            if "funcionalidades_clave" in respuesta_json:
+                respuesta_json["funcionalidades_clave"] = self._mejorar_funcionalidades_clave_avanzado(
+                    respuesta_json["funcionalidades_clave"], 
+                    analisis_proyecto, 
+                    licitaciones,
+                    parametros_proyecto
+                )
+            
+            # Mejorar alcance del servicio
+            if "alcance_servicio" in respuesta_json:
+                respuesta_json["alcance_servicio"] = self._mejorar_alcance_servicio_avanzado(
+                    respuesta_json["alcance_servicio"], 
+                    analisis_proyecto,
+                    parametros_proyecto
+                )
+            
+            # Mejorar cronograma de implementación
+            if "cronograma_implementacion" in respuesta_json:
+                respuesta_json["cronograma_implementacion"] = self._mejorar_cronograma_implementacion(
+                    respuesta_json["cronograma_implementacion"],
+                    parametros_proyecto
+                )
+            
+            # Mejorar presupuesto detallado
+            if "presupuesto_detallado" in respuesta_json:
+                respuesta_json["presupuesto_detallado"] = self._mejorar_presupuesto_detallado(
+                    respuesta_json["presupuesto_detallado"],
+                    parametros_proyecto,
+                    analisis_proyecto
+                )
+            
+            return respuesta_json
+            
+        except Exception as e:
+            print(f"⚠️ Error mejorando secciones específicas: {e}")
+            return respuesta_json
+
+    def _mejorar_resumen_ejecutivo_avanzado(self, contenido_actual: str, analisis_proyecto: Dict[str, Any], parametros_proyecto: Dict[str, Any]) -> str:
+        """Mejora el resumen ejecutivo con análisis avanzado y parámetros calculados"""
+        
+        prompt = f"""
+        Mejora el Resumen Ejecutivo para que sea específico al proyecto analizado y use los parámetros calculados.
+        
+        ANÁLISIS DEL PROYECTO:
+        {json.dumps(analisis_proyecto, indent=2, ensure_ascii=False)}
+        
+        PARÁMETROS CALCULADOS:
+        {json.dumps(parametros_proyecto, indent=2, ensure_ascii=False)}
+        
+        CONTENIDO ACTUAL:
+        {contenido_actual}
+        
+        INSTRUCCIONES:
+        1. MENCIONA el CLIENTE específico y su SECTOR
+        2. Incluye el NOMBRE DEL PROYECTO calculado
+        3. Menciona el COSTO TOTAL y PLAZO calculados
+        4. Describe el OBJETIVO PRINCIPAL del proyecto
+        5. Menciona las TECNOLOGÍAS y SOLUCIONES específicas
+        6. Incluye BENEFICIOS ESPERADOS para el cliente
+        7. Haz el contenido más específico y menos genérico
+        8. Mantén al menos 1500 caracteres
+        9. Usa la información técnica específica identificada
+        10. Adapta el resumen al contexto del sector del cliente
+        
+        IMPORTANTE: El contenido debe ser específico para el cliente y usar los parámetros calculados.
+        
+        Devuelve SOLO el texto mejorado, sin explicaciones adicionales.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres un experto en resúmenes ejecutivos de proyectos tecnológicos. Crea resúmenes específicos y persuasivos."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.3
+            )
+            
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"⚠️ Error mejorando resumen ejecutivo avanzado: {e}")
+            return contenido_actual
+
+    def _mejorar_funcionalidades_clave_avanzado(self, contenido_actual: str, analisis_proyecto: Dict[str, Any], licitaciones: List[Dict[str, Any]], parametros_proyecto: Dict[str, Any]) -> str:
+        """Mejora las funcionalidades clave con análisis avanzado y parámetros calculados"""
+        
+        # Preparar información específica de las licitaciones
+        info_especifica = ""
+        for lic in licitaciones:
+            info_especifica += f"\nArchivo: {lic['archivo']}\n"
+            info_especifica += f"Datos: {json.dumps(lic['datos'], indent=2, ensure_ascii=False)}\n"
+        
+        prompt = f"""
+        Mejora las Funcionalidades Clave del Sistema para que sea específica al proyecto analizado y use los parámetros calculados.
+        
+        ANÁLISIS DEL PROYECTO:
+        {json.dumps(analisis_proyecto, indent=2, ensure_ascii=False)}
+        
+        PARÁMETROS CALCULADOS:
+        {json.dumps(parametros_proyecto, indent=2, ensure_ascii=False)}
+        
+        INFORMACIÓN ESPECÍFICA DE LICITACIONES:
+        {info_especifica}
+        
+        CONTENIDO ACTUAL:
+        {contenido_actual}
+        
+        INSTRUCCIONES:
+        1. MENCIONA el CLIENTE específico y su SECTOR
+        2. Incluye el NOMBRE DEL PROYECTO calculado
+        3. Describe específicamente las funcionalidades identificadas en las licitaciones
+        4. Incluye módulos específicos del sistema requerido para el sector
+        5. Menciona características técnicas específicas
+        6. Relaciona las funcionalidades con el objetivo del proyecto y el sector
+        7. Haz el contenido más específico y menos genérico
+        8. Mantén al menos 1500 caracteres
+        9. Usa la información técnica específica identificada
+        10. Adapta las funcionalidades al contexto del sector del cliente
+        
+        IMPORTANTE: El contenido debe ser específico para el cliente y usar los parámetros calculados.
+        
+        Devuelve SOLO el texto mejorado, sin explicaciones adicionales.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres un experto en análisis de sistemas y funcionalidades. Describe específicamente las funcionalidades requeridas."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.3
+            )
+            
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"⚠️ Error mejorando funcionalidades clave avanzado: {e}")
+            return contenido_actual
+
+    def _mejorar_alcance_servicio_avanzado(self, contenido_actual: list, analisis_proyecto: Dict[str, Any], parametros_proyecto: Dict[str, Any]) -> list:
+        """Mejora el alcance del servicio con análisis avanzado y parámetros calculados"""
+        
+        prompt = f"""
+        Mejora la lista del Alcance del Servicio para que sea específica al proyecto analizado y use los parámetros calculados.
+        
+        ANÁLISIS DEL PROYECTO:
+        {json.dumps(analisis_proyecto, indent=2, ensure_ascii=False)}
+        
+        PARÁMETROS CALCULADOS:
+        {json.dumps(parametros_proyecto, indent=2, ensure_ascii=False)}
+        
+        ALCANCE ACTUAL:
+        {contenido_actual}
+        
+        INSTRUCCIONES:
+        1. Personaliza cada elemento para el CLIENTE ESPECÍFICO y su SECTOR
+        2. Incluye el NOMBRE DEL PROYECTO calculado
+        3. Menciona el PLAZO y COSTO calculados
+        4. Incluye detalles específicos del alcance identificado
+        5. Menciona usuarios finales específicos del sector
+        6. Incluye requisitos técnicos específicos
+        7. Haz el contenido más específico y menos genérico
+        8. Mantén al menos 8 elementos
+        9. Usa la información específica del proyecto analizado
+        10. Adapta el alcance al contexto del sector del cliente
+        
+        IMPORTANTE: Cada elemento debe ser específico para el cliente y usar los parámetros calculados.
+        
+        Devuelve SOLO la lista mejorada en formato JSON array, sin explicaciones adicionales.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres un experto en definición de alcances de proyectos. Personaliza el alcance para proyectos específicos."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500,
+                temperature=0.3
+            )
+            
+            contenido = response.choices[0].message.content.strip()
+            # Extraer la lista del JSON
+            import re
+            match = re.search(r'\[.*\]', contenido, re.DOTALL)
+            if match:
+                return json.loads(match.group(0))
+            else:
+                return contenido_actual
+                
+        except Exception as e:
+            print(f"⚠️ Error mejorando alcance del servicio avanzado: {e}")
+            return contenido_actual
+
+    def _mejorar_cronograma_implementacion(self, contenido_actual: Dict[str, Any], parametros_proyecto: Dict[str, Any]) -> Dict[str, Any]:
+        """Mejora el cronograma de implementación basado en los parámetros calculados"""
+        
+        plazo = parametros_proyecto["plazo"]
+        
+        prompt = f"""
+        Mejora el Cronograma de Implementación para que sea específico al proyecto y use el plazo calculado.
+        
+        PARÁMETROS CALCULADOS:
+        {json.dumps(parametros_proyecto, indent=2, ensure_ascii=False)}
+        
+        PLAZO CALCULADO: {plazo}
+        
+        CRONOGRAMA ACTUAL:
+        {json.dumps(contenido_actual, indent=2, ensure_ascii=False)}
+        
+        INSTRUCCIONES:
+        1. Ajusta las fechas y duraciones según el PLAZO CALCULADO
+        2. Incluye el NOMBRE DEL PROYECTO calculado
+        3. Menciona el CLIENTE específico
+        4. Distribuye las actividades de manera realista
+        5. Incluye hitos importantes del proyecto
+        6. Haz el cronograma más específico y detallado
+        7. Mantén la estructura de fases pero ajusta los tiempos
+        8. Usa la información específica del proyecto analizado
+        
+        IMPORTANTE: El cronograma debe ser realista y usar el plazo calculado.
+        
+        Devuelve SOLO el JSON mejorado, sin explicaciones adicionales.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres un experto en planificación de proyectos. Crea cronogramas realistas y detallados."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=600,
+                temperature=0.2
+            )
+            
+            contenido = response.choices[0].message.content.strip()
+            return json.loads(self._extraer_json(contenido))
+                
+        except Exception as e:
+            print(f"⚠️ Error mejorando cronograma de implementación: {e}")
+            return contenido_actual
+
+    def _mejorar_presupuesto_detallado(self, contenido_actual: Dict[str, Any], parametros_proyecto: Dict[str, Any], analisis_proyecto: Dict[str, Any]) -> Dict[str, Any]:
+        """Mejora el presupuesto detallado basado en los parámetros calculados"""
+        
+        costo_total = parametros_proyecto["costo_total"]
+        
+        prompt = f"""
+        Mejora el Presupuesto Detallado para que sea específico al proyecto y use el costo calculado.
+        
+        PARÁMETROS CALCULADOS:
+        {json.dumps(parametros_proyecto, indent=2, ensure_ascii=False)}
+        
+        COSTO TOTAL CALCULADO: ${costo_total:,} CLP
+        
+        ANÁLISIS DEL PROYECTO:
+        {json.dumps(analisis_proyecto, indent=2, ensure_ascii=False)}
+        
+        PRESUPUESTO ACTUAL:
+        {json.dumps(contenido_actual, indent=2, ensure_ascii=False)}
+        
+        INSTRUCCIONES:
+        1. Ajusta los montos para que sumen el COSTO TOTAL CALCULADO
+        2. Incluye el NOMBRE DEL PROYECTO calculado
+        3. Menciona el CLIENTE específico
+        4. Distribuye el presupuesto de manera realista según la complejidad
+        5. Incluye partidas específicas del tipo de proyecto
+        6. Haz el presupuesto más específico y detallado
+        7. Mantén la estructura pero ajusta los montos
+        8. Usa la información específica del proyecto analizado
+        
+        IMPORTANTE: El presupuesto debe sumar el costo total calculado y ser realista.
+        
+        Devuelve SOLO el JSON mejorado, sin explicaciones adicionales.
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres un experto en presupuestos de proyectos tecnológicos. Crea presupuestos realistas y detallados."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=600,
+                temperature=0.2
+            )
+            
+            contenido = response.choices[0].message.content.strip()
+            return json.loads(self._extraer_json(contenido))
+                
+        except Exception as e:
+            print(f"⚠️ Error mejorando presupuesto detallado: {e}")
+            return contenido_actual
+
+    def _generar_estructura_base(self, parametros_proyecto: Dict[str, Any], empresa_nombre: str) -> Dict[str, Any]:
+        """Genera la estructura base de la oferta con parámetros calculados"""
+        
+        return {
+            "projectInfo": {
+                "name": self._formatear_texto_pdf(parametros_proyecto["nombre_proyecto"]),
+                "client": self._acortar_nombre_cliente(parametros_proyecto["cliente"]),
+                "date": parametros_proyecto["fecha"],
+                "totalCost": parametros_proyecto["costo_total"],
+                "timeline": parametros_proyecto["plazo"]
+            },
+            "sections": [
+                {"id": "1", "title": "Resumen Ejecutivo", "type": "text", "content": "", "pageBreak": True},
+                {"id": "2", "title": "Alcance del Servicio", "type": "list", "content": []},
+                {"id": "3", "title": "Funcionalidades Clave del Sistema", "type": "text", "content": "", "pageBreak": True},
+                {"id": "4", "title": "Tipos de Usuarios y Permisos", "type": "table", "content": {"headers": [], "rows": []}},
+                {"id": "5", "title": "Infraestructura Tecnológica", "type": "text", "content": "", "pageBreak": True},
+                {"id": "6", "title": "Equipo de Trabajo Asignado", "type": "table", "content": {"headers": [], "rows": []}},
+                {"id": "7", "title": "Metodología de Implementación", "type": "text", "content": "", "pageBreak": True},
+                {"id": "8", "title": "Garantías y Soporte Post-implementación", "type": "text", "content": ""},
+                {"id": "9", "title": "Plan de Capacitación", "type": "list", "content": []},
+                {"id": "10", "title": "Experiencia y Referencias", "type": "text", "content": "", "pageBreak": True},
+                {"id": "11", "title": "Factores Clave para el Éxito", "type": "list", "content": []},
+                {"id": "12", "title": "Cronograma Detallado del Proyecto", "type": "table", "content": {"headers": [], "rows": []}},
+                {"id": "13", "title": "Inversión y Condiciones de Pago", "type": "text", "content": ""},
+                {"id": "14", "title": "Política de Diversidad e Inclusión", "type": "text", "content": ""}
+            ],
+            "styling": {
+                "primaryColor": "#2563eb",
+                "secondaryColor": "#1e40af",
+                "fontFamily": "Arial, sans-serif"
+            }
+        }
+
+    def _generar_contenido_por_secciones(self, estructura_base: Dict[str, Any], licitaciones: List[Dict[str, Any]], analisis_proyecto: Dict[str, Any], parametros_proyecto: Dict[str, Any]) -> Dict[str, Any]:
+        """Genera contenido específico para cada sección basado en las licitaciones"""
+        
+        print("📝 Generando contenido sección por sección...")
+        
+        # Extraer información clave
+        cliente = parametros_proyecto["cliente"]
+        sector = analisis_proyecto.get('sector', 'Tecnología')
+        objetivo = analisis_proyecto.get('objetivo_principal', 'Desarrollar sistema')
+        
+        # Generar contenido para cada sección
+        for seccion in estructura_base["sections"]:
+            seccion_id = seccion["id"]
+            titulo = seccion["title"]
+            
+            print(f"🔧 Generando: {titulo}")
+            
+            if titulo == "Resumen Ejecutivo":
+                seccion["content"] = self._generar_resumen_ejecutivo_simple(licitaciones, cliente, sector, objetivo, parametros_proyecto)
+            elif titulo == "Alcance del Servicio":
+                seccion["content"] = self._generar_alcance_servicio_simple(licitaciones, cliente, sector, analisis_proyecto)
+            elif titulo == "Funcionalidades Clave del Sistema":
+                seccion["content"] = self._generar_funcionalidades_simple(licitaciones, cliente, sector, analisis_proyecto)
+            elif titulo == "Tipos de Usuarios y Permisos":
+                seccion["content"] = self._generar_usuarios_permisos_simple(licitaciones, cliente, sector)
+            elif titulo == "Infraestructura Tecnológica":
+                seccion["content"] = self._generar_infraestructura_simple(licitaciones, cliente, sector, analisis_proyecto)
+            elif titulo == "Equipo de Trabajo Asignado":
+                seccion["content"] = self._generar_equipo_simple(licitaciones, cliente, sector, parametros_proyecto)
+            elif titulo == "Metodología de Implementación":
+                seccion["content"] = self._generar_metodologia_simple(licitaciones, cliente, sector, parametros_proyecto)
+            elif titulo == "Garantías y Soporte Post-implementación":
+                seccion["content"] = self._generar_garantias_simple(licitaciones, cliente, sector)
+            elif titulo == "Plan de Capacitación":
+                seccion["content"] = self._generar_capacitacion_simple(licitaciones, cliente, sector)
+            elif titulo == "Experiencia y Referencias":
+                seccion["content"] = self._generar_experiencia_simple(licitaciones, cliente, sector)
+            elif titulo == "Factores Clave para el Éxito":
+                seccion["content"] = self._generar_factores_exito_simple(licitaciones, cliente, sector)
+            elif titulo == "Cronograma Detallado del Proyecto":
+                seccion["content"] = self._generar_cronograma_simple(licitaciones, cliente, sector, parametros_proyecto)
+            elif titulo == "Inversión y Condiciones de Pago":
+                seccion["content"] = self._generar_inversion_simple(licitaciones, cliente, sector, parametros_proyecto)
+            elif titulo == "Política de Diversidad e Inclusión":
+                seccion["content"] = self._generar_politica_diversidad_simple(licitaciones, cliente, sector)
+        
+        return estructura_base
+
+    def _generar_resumen_ejecutivo_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str, objetivo: str, parametros_proyecto: Dict[str, Any]) -> str:
+        """Genera resumen ejecutivo específico para el cliente"""
+        
+        # Extraer información clave de las licitaciones
+        info_clave = ""
+        if licitaciones:
+            licitacion = licitaciones[0]
+            for seccion, contenido in licitacion['datos'].items():
+                if any(palabra in seccion.lower() for palabra in ['objetivo', 'proposito', 'necesidad', 'problema']):
+                    if isinstance(contenido, str) and len(contenido) > 50:
+                        info_clave += f"{contenido[:200]} "
+        
+        prompt = f"""
+        Genera un resumen ejecutivo específico para {cliente} del sector {sector}.
+        
+        INFORMACIÓN CLAVE:
+        {info_clave}
+        
+        PROYECTO: {parametros_proyecto['nombre_proyecto']}
+        OBJETIVO: {objetivo}
+        COSTO: ${parametros_proyecto['costo_total']:,}
+        PLAZO: {parametros_proyecto['plazo']}
+        
+        Genera un resumen ejecutivo de 300-400 palabras que:
+        1. Mencione específicamente a {cliente}
+        2. Explique el objetivo del proyecto
+        3. Describa el valor que aportará la solución
+        4. Mencione el costo y plazo
+        5. Sea específico para el sector {sector}
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres experto en resúmenes ejecutivos de proyectos tecnológicos."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=400,
+                temperature=0.3
+            )
+            return self._formatear_texto_pdf(response.choices[0].message.content.strip())
+        except Exception as e:
+            print(f"⚠️ Error generando resumen ejecutivo: {e}")
+            return self._formatear_texto_pdf(f"GUX Technologies presenta esta propuesta técnica para {cliente}, empresa del sector {sector}, con el objetivo de {objetivo}. El proyecto tiene un costo total de ${parametros_proyecto['costo_total']:,} y un plazo de {parametros_proyecto['plazo']}.")
+
+    def _generar_funcionalidades_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str, analisis_proyecto: Dict[str, Any]) -> str:
+        """Genera funcionalidades específicas basadas en las licitaciones"""
+        
+        # Extraer funcionalidades de las licitaciones
+        funcionalidades = []
+        if licitaciones:
+            licitacion = licitaciones[0]
+            for seccion, contenido in licitacion['datos'].items():
+                if any(palabra in seccion.lower() for palabra in ['funcionalidad', 'requisito', 'caracteristica', 'modulo', 'sistema']):
+                    if isinstance(contenido, str):
+                        funcionalidades.append(f"{seccion}: {contenido[:100]}")
+        
+        prompt = f"""
+        Genera funcionalidades específicas para {cliente} del sector {sector}.
+        
+        FUNCIONALIDADES IDENTIFICADAS:
+        {chr(10).join(funcionalidades[:5])}
+        
+        SECTOR: {sector}
+        OBJETIVO: {analisis_proyecto.get('objetivo_principal', 'Desarrollar sistema')}
+        
+        Genera un texto de 400-500 palabras que describa:
+        1. Funcionalidades específicas para {cliente}
+        2. Módulos adaptados al sector {sector}
+        3. Características técnicas relevantes
+        4. Beneficios específicos para el cliente
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres experto en análisis de sistemas y funcionalidades."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500,
+                temperature=0.3
+            )
+            return self._formatear_texto_pdf(response.choices[0].message.content.strip())
+        except Exception as e:
+            print(f"⚠️ Error generando funcionalidades: {e}")
+            return self._formatear_texto_pdf(f"El sistema para {cliente} incluye funcionalidades específicas del sector {sector}, diseñadas para {analisis_proyecto.get('objetivo_principal', 'desarrollar el sistema requerido')}.")
+
+    def _generar_alcance_servicio_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str, analisis_proyecto: Dict[str, Any]) -> List[str]:
+        """Genera alcance específico basado en las licitaciones"""
+        
+        # Extraer alcance de las licitaciones
+        alcance_items = []
+        if licitaciones:
+            licitacion = licitaciones[0]
+            for seccion, contenido in licitacion['datos'].items():
+                if any(palabra in seccion.lower() for palabra in ['alcance', 'servicio', 'entregable', 'funcionalidad']):
+                    if isinstance(contenido, str):
+                        # Acortar el contenido extraído
+                        contenido_corto = contenido[:40] if len(contenido) > 40 else contenido
+                        alcance_items.append(f"{seccion}: {contenido_corto}")
+        
+        # Generar items específicos del sector
+        if "bancario" in sector.lower():
+            alcance_items.extend([
+                "Gestión de transacciones",
+                "Reportes regulatorios",
+                "Integración bancaria",
+                "Auditoría y trazabilidad"
+            ])
+        elif "educativo" in sector.lower():
+            alcance_items.extend([
+                "Gestión académica",
+                "Evaluación y seguimiento",
+                "Reportes educativos",
+                "Integración institucional"
+            ])
+        elif "salud" in sector.lower():
+            alcance_items.extend([
+                "Gestión de pacientes",
+                "Historiales clínicos",
+                "Citas y agenda",
+                "Integración de salud"
+            ])
+        else:
+            alcance_items.extend([
+                f"Desarrollo para {cliente}",
+                "Gestión principal",
+                "Reportes y análisis",
+                "Integración de sistemas"
+            ])
+        
+        return self._formatear_lista_pdf(alcance_items[:8])  # Máximo 8 items
+
+    def _generar_usuarios_permisos_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str) -> Dict[str, Any]:
+        """Genera tabla de usuarios y permisos específica"""
+        
+        # Definir usuarios según el sector
+        if "bancario" in sector.lower():
+            usuarios = [
+                ["Administrador del Sistema", "Gestión completa del sistema", "Acceso total"],
+                ["Ejecutivo Bancario", "Gestión de transacciones", "Acceso operativo"],
+                ["Supervisor", "Monitoreo y reportes", "Acceso de supervisión"],
+                ["Auditor", "Revisión de transacciones", "Acceso de solo lectura"]
+            ]
+        elif "educativo" in sector.lower():
+            usuarios = [
+                ["Administrador Académico", "Gestión de programas y cursos", "Acceso administrativo"],
+                ["Docente", "Gestión de evaluaciones", "Acceso docente"],
+                ["Estudiante", "Acceso a recursos educativos", "Acceso limitado"],
+                ["Coordinador", "Supervisión académica", "Acceso de coordinación"]
+            ]
+        elif "salud" in sector.lower():
+            usuarios = [
+                ["Administrador Clínico", "Gestión de pacientes y citas", "Acceso administrativo"],
+                ["Médico", "Gestión de historiales clínicos", "Acceso médico"],
+                ["Enfermero", "Registro de datos de pacientes", "Acceso de enfermería"],
+                ["Recepcionista", "Gestión de citas", "Acceso de recepción"]
+            ]
+        else:
+            usuarios = [
+                ["Administrador del Sistema", "Gestión completa", "Acceso total"],
+                ["Usuario Operativo", "Operaciones diarias", "Acceso operativo"],
+                ["Supervisor", "Monitoreo y control", "Acceso de supervisión"],
+                ["Usuario Final", "Uso del sistema", "Acceso limitado"]
+            ]
+        
+        return {
+            "headers": ["Tipo de Usuario", "Funciones Principales", "Nivel de Permisos"],
+            "rows": usuarios
+        }
+
+    def _generar_infraestructura_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str, analisis_proyecto: Dict[str, Any]) -> str:
+        """Genera descripción de infraestructura específica"""
+        
+        # Extraer requisitos técnicos
+        requisitos_tecnicos = analisis_proyecto.get('requisitos_tecnicos', [])
+        tecnologias = analisis_proyecto.get('tecnologias_mencionadas', [])
+        
+        prompt = f"""
+        Genera descripción de infraestructura para {cliente} del sector {sector}.
+        
+        REQUISITOS TÉCNICOS: {', '.join(requisitos_tecnicos)}
+        TECNOLOGÍAS: {', '.join(tecnologias)}
+        
+        Genera texto de 300-400 palabras que describa:
+        1. Arquitectura técnica específica para {cliente}
+        2. Tecnologías adaptadas al sector {sector}
+        3. Consideraciones de seguridad y escalabilidad
+        4. Integración con sistemas existentes
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres experto en infraestructura tecnológica."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=400,
+                temperature=0.3
+            )
+            return self._formatear_texto_pdf(response.choices[0].message.content.strip())
+        except Exception as e:
+            print(f"⚠️ Error generando infraestructura: {e}")
+            return self._formatear_texto_pdf(f"La infraestructura para {cliente} incluye tecnologías modernas y escalables, adaptadas específicamente para el sector {sector}.")
+
+    def _generar_equipo_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str, parametros_proyecto: Dict[str, Any]) -> Dict[str, Any]:
+        """Genera tabla de equipo específico"""
+        
+        # Ajustar equipo según complejidad y sector
+        complejidad = "MEDIA"  # Por defecto
+        if parametros_proyecto['costo_total'] > 60000000:
+            complejidad = "ALTA"
+        elif parametros_proyecto['costo_total'] < 30000000:
+            complejidad = "BAJA"
+        
+        if complejidad == "ALTA":
+            equipo = [
+                ["Project Manager Senior", "Gestión integral del proyecto", "10+ años de experiencia"],
+                ["Arquitecto de Soluciones", "Diseño de arquitectura técnica", "8+ años de experiencia"],
+                ["Tech Lead", "Liderazgo técnico del equipo", "7+ años de experiencia"],
+                ["Desarrollador Senior", "Desarrollo de módulos críticos", "5+ años de experiencia"],
+                ["Desarrollador Full Stack", "Desarrollo frontend y backend", "3+ años de experiencia"],
+                ["QA Engineer", "Aseguramiento de calidad", "4+ años de experiencia"],
+                ["DevOps Engineer", "Infraestructura y despliegue", "5+ años de experiencia"],
+                ["UX/UI Designer", "Diseño de interfaces", "4+ años de experiencia"]
+            ]
+        elif complejidad == "BAJA":
+            equipo = [
+                ["Project Manager", "Gestión del proyecto", "5+ años de experiencia"],
+                ["Desarrollador Full Stack", "Desarrollo completo", "3+ años de experiencia"],
+                ["Desarrollador Frontend", "Interfaz de usuario", "2+ años de experiencia"],
+                ["QA Tester", "Pruebas del sistema", "2+ años de experiencia"]
+            ]
+        else:  # MEDIA
+            equipo = [
+                ["Project Manager", "Gestión del proyecto", "7+ años de experiencia"],
+                ["Arquitecto de Software", "Diseño de arquitectura", "6+ años de experiencia"],
+                ["Desarrollador Senior", "Desarrollo de módulos", "4+ años de experiencia"],
+                ["Desarrollador Full Stack", "Desarrollo completo", "3+ años de experiencia"],
+                ["QA Engineer", "Aseguramiento de calidad", "3+ años de experiencia"],
+                ["DevOps Engineer", "Infraestructura", "4+ años de experiencia"]
+            ]
+        
+        return {
+            "headers": ["Rol", "Responsabilidades Principales", "Experiencia Requerida"],
+            "rows": equipo
+        }
+
+    def _generar_metodologia_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str, parametros_proyecto: Dict[str, Any]) -> str:
+        """Genera metodología específica"""
+        
+        plazo = parametros_proyecto['plazo']
+        
+        prompt = f"""
+        Genera metodología de implementación para {cliente} del sector {sector}.
+        
+        PLAZO: {plazo}
+        SECTOR: {sector}
+        
+        Genera texto de 400-500 palabras que describa:
+        1. Metodología ágil adaptada al sector {sector}
+        2. Fases de implementación específicas para {cliente}
+        3. Entregables y hitos del proyecto
+        4. Gestión de riesgos y calidad
+        """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=self.modelo_backend,
+                messages=[
+                    {"role": "system", "content": "Eres experto en metodologías de implementación de proyectos."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500,
+                temperature=0.3
+            )
+            return self._formatear_texto_pdf(response.choices[0].message.content.strip())
+        except Exception as e:
+            print(f"⚠️ Error generando metodología: {e}")
+            return self._formatear_texto_pdf(f"La metodología para {cliente} utiliza un enfoque ágil adaptado al sector {sector}, con un plazo de {plazo} y entregables incrementales.")
+
+    def _generar_garantias_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str) -> str:
+        """Genera garantías específicas"""
+        
+        return self._formatear_texto_pdf(f"GUX Technologies ofrece garantías específicas para {cliente} del sector {sector}, incluyendo soporte técnico 24/7 durante los primeros 6 meses post-implementación, mantenimiento preventivo mensual, y actualizaciones de seguridad trimestrales. Se incluye capacitación inicial para el equipo y documentación técnica completa.")
+
+    def _generar_capacitacion_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str) -> List[str]:
+        """Genera plan de capacitación específico"""
+        
+        return self._formatear_lista_pdf([
+            f"Capacitación inicial para administradores",
+            f"Talleres específicos del sector {sector}",
+            f"Capacitación en funcionalidades avanzadas",
+            f"Entrenamiento en reportes y análisis",
+            f"Capacitación en mantenimiento del sistema",
+            f"Talleres de resolución de problemas",
+            f"Capacitación en nuevas funcionalidades",
+            f"Soporte continuo y consultoría técnica"
+        ])
+
+    def _generar_experiencia_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str) -> str:
+        """Genera experiencia y referencias específicas"""
+        
+        return self._formatear_texto_pdf(f"GUX Technologies cuenta con amplia experiencia en el sector {sector}, habiendo desarrollado soluciones similares para empresas del mismo rubro. Nuestro equipo tiene más de 10 años de experiencia en desarrollo de software empresarial y ha completado exitosamente más de 50 proyectos en diversos sectores, incluyendo casos de éxito específicos en {sector}.")
+
+    def _generar_factores_exito_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str) -> List[str]:
+        """Genera factores de éxito específicos"""
+        
+        return self._formatear_lista_pdf([
+            f"Compromiso total del equipo de {cliente}",
+            f"Comunicación efectiva entre GUX Technologies y {cliente}",
+            f"Definición clara de requisitos del sector {sector}",
+            f"Capacitación adecuada del personal",
+            f"Infraestructura técnica apropiada",
+            f"Apoyo de la alta dirección",
+            f"Plan de contingencia para mitigar riesgos",
+            f"Monitoreo continuo del progreso del proyecto"
+        ])
+
+    def _generar_cronograma_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str, parametros_proyecto: Dict[str, Any]) -> Dict[str, Any]:
+        """Genera cronograma específico"""
+        
+        plazo = parametros_proyecto['plazo']
+        meses = int(plazo.split()[0]) if plazo.split()[0].isdigit() else 5
+        
+        fases = []
+        if meses <= 3:
+            fases = [
+                ["Fase 1: Análisis y Diseño", "Semanas 1-2", "Requisitos y arquitectura"],
+                ["Fase 2: Desarrollo", "Semanas 3-8", "Desarrollo del sistema"],
+                ["Fase 3: Pruebas e Implementación", "Semanas 9-12", "Testing y despliegue"]
+            ]
+        elif meses <= 6:
+            fases = [
+                ["Fase 1: Análisis y Diseño", "Semanas 1-4", "Requisitos y arquitectura"],
+                ["Fase 2: Desarrollo Core", "Semanas 5-16", "Desarrollo de módulos principales"],
+                ["Fase 3: Desarrollo Avanzado", "Semanas 17-20", "Módulos especializados"],
+                ["Fase 4: Pruebas e Implementación", "Semanas 21-24", "Testing y despliegue"]
+            ]
+        else:
+            fases = [
+                ["Fase 1: Análisis y Diseño", "Semanas 1-6", "Requisitos y arquitectura"],
+                ["Fase 2: Desarrollo Core", "Semanas 7-20", "Desarrollo de módulos principales"],
+                ["Fase 3: Desarrollo Avanzado", "Semanas 21-28", "Módulos especializados"],
+                ["Fase 4: Integración", "Semanas 29-32", "Integración de sistemas"],
+                ["Fase 5: Pruebas e Implementación", "Semanas 33-36", "Testing y despliegue"]
+            ]
+        
+        return {
+            "headers": ["Fase", "Duración", "Entregables Principales"],
+            "rows": fases
+        }
+
+    def _generar_inversion_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str, parametros_proyecto: Dict[str, Any]) -> str:
+        """Genera información de inversión específica"""
+        
+        costo = parametros_proyecto['costo_total']
+        plazo = parametros_proyecto['plazo']
+        
+        return self._formatear_texto_pdf(f"La inversión total para el proyecto de {cliente} es de ${costo:,} CLP, con un plazo de {plazo}. El pago se estructura en cuotas: 30% al inicio del proyecto, 40% durante el desarrollo, y 30% al finalizar la implementación. Incluye desarrollo, implementación, capacitación y soporte post-implementación.")
+
+    def _generar_politica_diversidad_simple(self, licitaciones: List[Dict[str, Any]], cliente: str, sector: str) -> str:
+        """Genera política de diversidad e inclusión específica"""
+        
+        # Contenido basado en ofertas históricas
+        politica_base = f"""
+GUX Technologies se compromete firmemente con la diversidad e inclusión en todos nuestros proyectos, incluyendo el desarrollo de la solución para {cliente}. Nuestra política se fundamenta en los siguientes principios:
+
+**Compromiso con la Diversidad:**
+• Promovemos activamente la participación de profesionales de diferentes géneros, edades, orígenes étnicos y culturales en nuestros equipos de desarrollo.
+• Fomentamos la inclusión de personas con diferentes capacidades y perspectivas, reconociendo que la diversidad enriquece la creatividad y la innovación en el desarrollo de soluciones tecnológicas.
+
+**Equipo Inclusivo:**
+• Nuestro equipo de trabajo para el proyecto de {cliente} refleja nuestra política de diversidad, incluyendo profesionales con diferentes experiencias y perspectivas.
+• Promovemos un ambiente de trabajo respetuoso e inclusivo donde todas las voces son valoradas y consideradas en el proceso de desarrollo.
+
+**Desarrollo de Soluciones Inclusivas:**
+• Las soluciones tecnológicas que desarrollamos para {cliente} están diseñadas considerando la accesibilidad y usabilidad para usuarios diversos.
+• Incorporamos principios de diseño universal que aseguran que la plataforma sea accesible para personas con diferentes capacidades.
+
+**Capacitación y Sensibilización:**
+• Nuestro equipo recibe capacitación continua en temas de diversidad e inclusión.
+• Promovemos la sensibilización sobre la importancia de crear entornos de trabajo inclusivos y respetuosos.
+
+**Medición y Seguimiento:**
+• Establecemos métricas para medir el progreso en diversidad e inclusión en nuestros proyectos.
+• Realizamos evaluaciones periódicas para asegurar que nuestras políticas se implementen efectivamente.
+
+Este compromiso con la diversidad e inclusión no solo es parte de nuestros valores corporativos, sino que también contribuye a la calidad y efectividad de las soluciones que desarrollamos para {cliente}, asegurando que sean accesibles, relevantes y beneficiosas para todos los usuarios finales.
+"""
+        
+        return self._formatear_texto_pdf(politica_base.strip())
+
+    def _formatear_texto_pdf(self, texto: str, max_caracteres: int = 70) -> str:
+        """Formatea el texto agregando saltos de línea para mejor visualización en PDF"""
+        
+        if not texto:
+            return texto
+        
+        # Dividir el texto en párrafos
+        parrafos = texto.split('\n\n')
+        parrafos_formateados = []
+        
+        for parrafo in parrafos:
+            if parrafo.strip():
+                # Formatear cada párrafo
+                parrafo_formateado = self._formatear_parrafo(parrafo.strip(), max_caracteres)
+                parrafos_formateados.append(parrafo_formateado)
+        
+        return '\n\n'.join(parrafos_formateados)
+
+    def _formatear_parrafo(self, parrafo: str, max_caracteres: int = 70) -> str:
+        """Formatea un párrafo agregando saltos de línea"""
+        
+        # Si el párrafo es muy corto, no necesita formateo
+        if len(parrafo) <= max_caracteres:
+            return parrafo
+        
+        # Dividir en palabras
+        palabras = parrafo.split()
+        lineas = []
+        linea_actual = ""
+        
+        for palabra in palabras:
+            # Si agregar la palabra excede el límite, crear nueva línea
+            if len(linea_actual + " " + palabra) > max_caracteres:
+                if linea_actual:
+                    lineas.append(linea_actual.strip())
+                    linea_actual = palabra
+                else:
+                    # Si la palabra es muy larga, dividirla
+                    if len(palabra) > max_caracteres:
+                        lineas.append(palabra[:max_caracteres])
+                        linea_actual = palabra[max_caracteres:]
+                    else:
+                        linea_actual = palabra
+            else:
+                linea_actual += " " + palabra if linea_actual else palabra
+        
+        # Agregar la última línea
+        if linea_actual:
+            lineas.append(linea_actual.strip())
+        
+        return '\n'.join(lineas)
+
+    def _formatear_lista_pdf(self, lista: List[str], max_caracteres: int = 45) -> List[str]:
+        """Formatea cada elemento de una lista para mejor visualización en PDF"""
+        
+        if not lista:
+            return lista
+        
+        lista_formateada = []
+        for elemento in lista:
+            if isinstance(elemento, str):
+                # Si el elemento es muy largo, dividirlo en múltiples puntos
+                if len(elemento) > max_caracteres:  # Si excede el límite
+                    elementos_divididos = self._dividir_elemento_lista(elemento, max_caracteres)
+                    lista_formateada.extend(elementos_divididos)
+                else:
+                    lista_formateada.append(elemento)
+            else:
+                lista_formateada.append(elemento)
+        
+        return lista_formateada
+
+    def _dividir_elemento_lista(self, elemento: str, max_caracteres: int = 45) -> List[str]:
+        """Divide un elemento largo de lista en múltiples puntos más cortos"""
+        
+        # Dividir por comas, puntos y conectores comunes
+        divisores = [', ', '. ', ' y ', ' o ', '; ', ' además ', ' también ', ' incluyendo ', ' para ', ' con ', ' mediante ', ' a través de ']
+        
+        # Buscar el mejor punto de división
+        mejor_division = None
+        mejor_posicion = -1
+        
+        for divisor in divisores:
+            if divisor in elemento:
+                posicion = elemento.find(divisor)
+                if posicion > 20 and posicion < len(elemento) - 10:  # Buscar división más temprana
+                    if mejor_posicion == -1 or posicion < mejor_posicion:
+                        mejor_posicion = posicion
+                        mejor_division = divisor
+        
+        if mejor_division and mejor_posicion > 0:
+            # Dividir en el punto encontrado
+            parte1 = elemento[:mejor_posicion].strip()
+            parte2 = elemento[mejor_posicion + len(mejor_division):].strip()
+            
+            elementos = []
+            if parte1:
+                elementos.append(parte1)
+            if parte2:
+                elementos.append(parte2)
+            
+            return elementos
+        
+        # Si no se puede dividir lógicamente, dividir por longitud
+        if len(elemento) > max_caracteres:
+            palabras = elemento.split()
+            elementos = []
+            elemento_actual = ""
+            
+            for palabra in palabras:
+                if len(elemento_actual + " " + palabra) <= max_caracteres:
+                    elemento_actual += " " + palabra if elemento_actual else palabra
+                else:
+                    if elemento_actual:
+                        elementos.append(elemento_actual.strip())
+                    elemento_actual = palabra
+            
+            if elemento_actual:
+                elementos.append(elemento_actual.strip())
+            
+            return elementos
+        
+        return [elemento]
+
+    def _acortar_nombre_cliente(self, nombre_cliente: str) -> str:
+        """Acorta el nombre del cliente para evitar saltos de línea"""
+        
+        if not nombre_cliente:
+            return nombre_cliente
+        
+        # Si el nombre es muy largo, tomar solo la primera parte
+        if len(nombre_cliente) > 30:
+            # Buscar palabras clave para acortar
+            palabras = nombre_cliente.split()
+            
+            # Si tiene más de 3 palabras, tomar las primeras 2-3
+            if len(palabras) > 3:
+                return " ".join(palabras[:3])
+            else:
+                # Si es una sola palabra larga, truncar
+                return nombre_cliente[:30]
+        
+        return nombre_cliente

@@ -184,8 +184,8 @@ El sistema genera ofertas técnicas siguiendo los estándares institucionales:
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
 | GET | `/` | Información del sistema |
-| POST | `/cargar-licitacion/` | Cargar licitación Word |
-| POST | `/cargar-oferta/` | Cargar oferta técnica histórica |
+| POST | `/cargar-licitacion/` | Cargar licitación (DOCX o PDF) |
+| POST | `/cargar-oferta/` | Cargar oferta técnica histórica (DOCX o PDF) |
 | POST | `/generar-oferta/` | Generar oferta desde licitación existente |
 | POST | `/generar-oferta-archivo/` | Generar oferta desde archivo subido |
 | POST | `/generar-oferta-multiple/` | Generar oferta analizando múltiples archivos (con parámetros personalizables) |
